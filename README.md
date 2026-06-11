@@ -130,5 +130,5 @@ MIT License – feel free to use and modify!
 
 Made with Jogi RohithKumar 
 🔗 [LinkedIn](https://www.linkedin.com/in/rohith-kumar-jogi-747a782b8/)
-'''
+
 ---
