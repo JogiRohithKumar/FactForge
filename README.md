@@ -126,8 +126,8 @@ MIT License – feel free to use and modify!
 
 ---
 
-## 💬 Connect
+## 🌐 Connect
 
 Made with Jogi RohithKumar 
-🔗 [LinkedIn]([https://linkedin.com/in/your-profile](https://www.linkedin.com/in/rohith-kumar-jogi-747a782b8/))
+🔗 [LinkedIn](https://www.linkedin.com/in/rohith-kumar-jogi-747a782b8/)
 ```
