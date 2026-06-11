@@ -1,4 +1,4 @@
-# 📰 Fake News Detection with Machine Learning
+# 📰 Detecting Misinformation Through Machine Learning
 
 A simple yet effective machine learning application that detects whether a news article is **fake** or **real** based on its content. Built with Python, Scikit-learn, and Streamlit for an interactive web interface.
 
