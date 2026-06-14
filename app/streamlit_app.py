@@ -97,20 +97,29 @@ with tab1:
         if not url_input.strip():
             st.warning("Please enter a valid URL.")
         else:
-            # Clean up URL string display for history log snippet
             input_source = url_input.replace("https://", "").replace("www.", "")[:25] + "..."
             with st.spinner("Extracting content from web page and running NLP inference..."):
-                try:
-                    response = requests.post("http://127.0.0.1:8000/predict-url", json={"url": url_input}, timeout=7)
-                    if response.status_code == 200:
-                        data = response.json()
-                except requests.exceptions.RequestException:
-                    data = None
+                
+                # Check if running locally or on Streamlit Cloud
+                is_cloud = os.environ.get("STREAMLIT_RUNTIME_ENVIRONMENT") == "cloud" or "mount" in os.getcwd()
+                
+                # Mode 1: If local, try hitting the local API
+                if not is_cloud:
+                    try:
+                        response = requests.post("http://127.0.0.1:8000/predict-url", json={"url": url_input}, timeout=3)
+                        if response.status_code == 200:
+                            data = response.json()
+                    except requests.exceptions.RequestException:
+                        data = None
 
+                # Mode 2: If on Cloud (or if local API is down), use the local function direct fallback
                 if data is None and extract_text_from_url is not None and get_prediction is not None:
                     try:
                         text = extract_text_from_url(url_input)
-                        data = get_prediction(text)
+                        if text and text.strip():
+                            data = get_prediction(text)
+                        else:
+                            st.error("The website content could not be extracted. Try copying and pasting the text manually in the next tab.")
                     except Exception as e:
                         st.error(f"Scraping Engine failed: {e}")
 
