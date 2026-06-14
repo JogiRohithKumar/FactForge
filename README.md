@@ -101,5 +101,11 @@ Open `http://localhost:8501` in your browser to interact with the full premium g
 
 Rather than utilizing basic UI primitives, the user interface features a specialized **Frosted Glass (Glassmorphism)** architecture. By injecting custom scoped CSS style rules into the browser DOM engine, the app delivers a modern SaaS dashboard look, utilizing high-contrast focus elements, smooth hover transitions, real-time status spinners, and a stateful contextual workspace side drawer tracking verification history.
 
+---
+
+**Engineered & Developed by:** [Rohith Kumar Jogi](https://www.linkedin.com/in/YOUR_LINKEDIN_USERNAME)  
+💼 **Connect on LinkedIn:** [#LinkedIn](https://www.linkedin.com/in/YOUR_LINKEDIN_USERNAME)
+
+---
 
 
