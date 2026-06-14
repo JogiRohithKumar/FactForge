@@ -3,86 +3,156 @@ import requests
 import os
 import sys
 
-# Page Configuration (Must be first)
+# 1. Page Configuration
 st.set_page_config(page_title="FactForge Pro", page_icon="📰", layout="centered")
+
+# 2. Injecting Glassmorphism Custom CSS Layer
+st.markdown("""
+    <style>
+    /* Main Background Custom Styling */
+    .stApp {
+        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+    }
+    
+    /* Global Glassmorphic Card Styling applied to UI Blocks */
+    div.stButton > button, div[data-testid="stMarkdownContainer"] h3 {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Designing Custom Frosted Glass Panels for Results */
+    .glass-panel {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 25px;
+        margin-top: 20px;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+    
+    /* Polishing Text Area Focus Layout */
+    textarea {
+        background: rgba(255, 255, 255, 0.03) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: #f8fafc !important;
+        border-radius: 12px !important;
+    }
+    
+    /* Primary Action Trigger Custom Glass Button */
+    div.stButton > button:first-child {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.8) 0%, rgba(168, 85, 247, 0.8) 100%) !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        color: white !important;
+        padding: 10px 24px !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4) !important;
+    }
+    
+    div.stButton > button:first-child:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6) !important;
+        border: 1px solid rgba(255, 255, 255, 0.4) !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # Safe Import of Backend Service as a Fallback
 try:
     sys.path.append(os.getcwd())
-    from api.service import get_prediction
+    from api.service import get_prediction, extract_text_from_url
 except ImportError:
     get_prediction = None
+    extract_text_from_url = None
 
 st.title("📰 FactForge Pro")
 st.subheader("Production-Grade Misinformation Detection SaaS")
+st.markdown("---")
 
 # Initialize State Management for User History
 if 'history' not in st.session_state:
     st.session_state.history = []
 
-# Sidebar for displaying user history session
+# Sidebar User Workspace
 st.sidebar.title("👤 User Workspace")
 st.sidebar.markdown("---")
 st.sidebar.subheader("Recent Verifications")
-
 if not st.session_state.history:
     st.sidebar.info("No articles verified in this session.")
 else:
     for item in reversed(st.session_state.history):
         st.sidebar.write(item)
 
-# Main Input Interface
-user_input = st.text_area(
-    "Paste the news article content below for real-time validation:", 
-    height=200,
-    placeholder="Type or paste text here..."
-)
+# Create Tabs for Ingestion Modes
+tab1, tab2 = st.tabs(["🔗 Verify via URL", "📝 Verify via Text"])
 
-if st.button("Analyze Article", type="primary"):
-    if not user_input.strip():
-        st.warning("Please enter some text before processing.")
-    else:
-        with st.spinner("Running text parsing and statistical NLP inference..."):
-            data = None
-            
-            # Mode 1: Attempt to communicate via Microservice (FastAPI Local Engine)
-            try:
-                payload = {"text": user_input}
-                response = requests.post("http://127.0.0.1:8000/predict", json=payload, timeout=2)
-                if response.status_code == 200:
-                    data = response.json()
-            except requests.exceptions.RequestException:
-                # API is down or restricted by cloud provider environment
-                data = None
+data = None
+input_source = ""
 
-            # Mode 2: Cloud Fallback Engine (Runs the service directly)
-            if data is None and get_prediction is not None:
+with tab1:
+    url_input = st.st.text_input("Enter the full news article URL:", placeholder="https://www.reuters.com/article...")
+    if st.button("Analyze Link", key="url_btn"):
+        if not url_input.strip():
+            st.warning("Please enter a valid URL.")
+        else:
+            input_source = url_input
+            with st.spinner("Extracting content from web page and running NLP inference..."):
                 try:
-                    data = get_prediction(user_input)
-                except Exception as e:
-                    st.error(f"Prediction processing error: {e}")
+                    response = requests.post("http://127.0.0.1:8000/predict-url", json={"url": url_input}, timeout=5)
+                    if response.status_code == 200:
+                        data = response.json()
+                except requests.exceptions.RequestException:
+                    data = None
 
-            # Render Results if Inferences Succeeded
-            if data is not None:
-                is_fake = data["is_fake"]
-                confidence = data["confidence"]
-                
-                result_label = "🚨 Fake News Pattern Found" if is_fake else "✅ Verified Authentic Content"
-                history_snippet = f"{'❌ Fake' if is_fake else '🟢 True'} ({confidence}%) - {user_input[:15]}..."
-                
-                st.session_state.history.append(history_snippet)
-                
-                st.markdown("### 📊 Analysis Report")
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    if is_fake:
-                        st.error(result_label)
-                    else:
-                        st.success(result_label)
-                        
-                with col2:
-                    st.metric(label="Model Confidence Score", value=f"{confidence}%")
-                    
-            else:
-                st.error("🔌 System Connection Failure: Unable to compute model inference via API or local fallback engine.")
+                if data is None and extract_text_from_url is not None and get_prediction is not None:
+                    try:
+                        text = extract_text_from_url(url_input)
+                        data = get_prediction(text)
+                    except Exception as e:
+                        st.error(f"Scraping Engine failed: {e}")
+
+with tab2:
+    text_input = st.text_area("Paste the news article content here:", height=200, placeholder="Type or paste text here...")
+    if st.button("Analyze Text", key="text_btn"):
+        if not text_input.strip():
+            st.warning("Please enter some text.")
+        else:
+            input_source = text_input[:20] + "..."
+            with st.spinner("Running statistical NLP inference..."):
+                try:
+                    response = requests.post("http://127.0.0.1:8000/predict", json={"text": text_input}, timeout=3)
+                    if response.status_code == 200:
+                        data = response.json()
+                except requests.exceptions.RequestException:
+                    data = None
+
+                if data is None and get_prediction is not None:
+                    data = get_prediction(text_input)
+
+# Render Glassmorphic Results Panel
+if data is not None:
+    is_fake = data["is_fake"]
+    confidence = data["confidence"]
+    
+    result_label = "🚨 Fake News Pattern Found" if is_fake else "✅ Verified Authentic Content"
+    st.session_state.history.append(f"{'❌ Fake' if is_fake else '🟢 True'} ({confidence}%) - {input_source}")
+    
+    # Wrapping results in a custom glass container panel
+    st.markdown(f"""
+        <div class="glass-panel">
+            <h3 style="color: white; margin-top: 0;">📊 Real-Time Analysis Report</h3>
+            <p style="color: #cbd5e1; font-size: 0.95rem; margin-bottom: 20px;">
+                The structural profile of this article was validated across cross-referenced corpora weights using our NLP pipeline.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.error(result_label) if is_fake else st.success(result_label)
+    with col2:
+        st.metric(label="Model Confidence Score", value=f"{confidence}%")
+elif input_source:
+    st.error("🔌 System Connection Failure: Unable to compute model inference.")
