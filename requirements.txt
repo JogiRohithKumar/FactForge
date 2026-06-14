@@ -1,6 +1,8 @@
-joblib==1.4.0
 streamlit
-pandas
-nltk
+requests
+fastapi
+uvicorn
 joblib
 scikit-learn
+pandas
+nltk
