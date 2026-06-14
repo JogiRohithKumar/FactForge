@@ -97,10 +97,11 @@ with tab1:
         if not url_input.strip():
             st.warning("Please enter a valid URL.")
         else:
-            input_source = url_input
+            # Clean up URL string display for history log snippet
+            input_source = url_input.replace("https://", "").replace("www.", "")[:25] + "..."
             with st.spinner("Extracting content from web page and running NLP inference..."):
                 try:
-                    response = requests.post("http://127.0.0.1:8000/predict-url", json={"url": url_input}, timeout=5)
+                    response = requests.post("http://127.0.0.1:8000/predict-url", json={"url": url_input}, timeout=7)
                     if response.status_code == 200:
                         data = response.json()
                 except requests.exceptions.RequestException:
@@ -131,7 +132,7 @@ with tab2:
                 if data is None and get_prediction is not None:
                     data = get_prediction(text_input)
 
-# Render Glassmorphic Results Panel
+# Render Glassmorphic Results Panel (FIXED IMPLEMENTATION)
 if data is not None:
     is_fake = data["is_fake"]
     confidence = data["confidence"]
@@ -149,10 +150,16 @@ if data is not None:
         </div>
     """, unsafe_allow_html=True)
     
+    # Explicitly separate column rendering logic to clear DeltaGenerator bugs
     col1, col2 = st.columns(2)
     with col1:
-        st.error(result_label) if is_fake else st.success(result_label)
+        if is_fake:
+            st.error(result_label)
+        else:
+            st.success(result_label)
+            
     with col2:
         st.metric(label="Model Confidence Score", value=f"{confidence}%")
+        
 elif input_source:
-    st.error("🔌 System Connection Failure: Unable to compute model inference.")
+    st.error("🔌 System Connection Failure: Unable to parse URL content or connect to the model service.")
