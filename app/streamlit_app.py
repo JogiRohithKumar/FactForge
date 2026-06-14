@@ -92,7 +92,7 @@ data = None
 input_source = ""
 
 with tab1:
-    url_input = st.st.text_input("Enter the full news article URL:", placeholder="https://www.reuters.com/article...")
+    url_input = st.text_input("Enter the full news article URL:", placeholder="https://www.reuters.com/article...")
     if st.button("Analyze Link", key="url_btn"):
         if not url_input.strip():
             st.warning("Please enter a valid URL.")
