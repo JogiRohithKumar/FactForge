@@ -103,8 +103,8 @@ Rather than utilizing basic UI primitives, the user interface features a special
 
 ---
 
-**Engineered & Developed by:** [Rohith Kumar Jogi](https://www.linkedin.com/in/YOUR_LINKEDIN_USERNAME)  
-💼 **Connect on LinkedIn:** [#LinkedIn](https://www.linkedin.com/in/YOUR_LINKEDIN_USERNAME)
+**Engineered & Developed by:** [Rohith Kumar Jogi]([https://www.linkedin.com/in/YOUR_LINKEDIN_USERNAME](https://www.linkedin.com/in/rohith-kumar-jogi-747a782b8/))  
+
 
 ---
 
