@@ -12,10 +12,10 @@ jobs:
 
     steps:
     - name: Checkout Code Repository Artifacts
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Configure Production Python Environment
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
         cache: 'pip'
@@ -28,11 +28,12 @@ jobs:
 
     - name: Execute Code Linting Standards Check (Flake8 Check)
       run: |
-        # stop the build if there are Python syntax errors or undefined names
+        # Stop the build on critical runtime syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings to maintain execution flow visibility
+        # Exit-zero configuration handles minor style warnings without crashing the CI pipeline
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
     - name: Execute Automated Unit Testing Framework (Pytest Suite)
       run: |
-        pytest
+        # Explicitly configure python path mapping so pytest discovers project folders correctly
+        PYTHONPATH=. pytest
