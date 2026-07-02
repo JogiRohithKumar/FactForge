@@ -184,10 +184,25 @@ st.markdown("""
 # 3. Path & Fallback Module Configurations
 try:
     sys.path.append(os.getcwd())
-    from api.service import get_prediction, extract_text_from_url
+    from api.service import get_prediction, extract_text_from_url_async
 except ImportError:
     get_prediction = None
-    extract_text_from_url = None
+    extract_text_from_url_async = None
+
+# =====================================================================
+# FIX: CRITICAL FUNCTION PLACEMENT TO PREVENT NAMEERROR
+# =====================================================================
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_api_prediction(endpoint_url: str, post_payload: dict):
+    """Triggers highly compressed network handshakes targeting the backend API engine."""
+    try:
+        response = requests.post(endpoint_url, json=post_payload, timeout=4)
+        if response.status_code == 200:
+            return response.json()
+    except requests.exceptions.RequestException:
+        pass
+    return None
+# =====================================================================
 
 # Initialize local session history matrix
 if 'history' not in st.session_state:
