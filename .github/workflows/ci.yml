@@ -1,0 +1,38 @@
+name: FactForge Pro CI Automation Workflow
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  continuous-integration-test-suite:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code Repository Artifacts
+      uses: actions/checkout@v3
+
+    - name: Configure Production Python Environment
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install System Dependencies Framework
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 pytest
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Execute Code Linting Standards Check (Flake8 Check)
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings to maintain execution flow visibility
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Execute Automated Unit Testing Framework (Pytest Suite)
+      run: |
+        pytest

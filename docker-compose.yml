@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  # FastAPI Microservice Gateway Server Component
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: factforge_backend
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./model:/workspace/model
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - factforge_network
+    restart: unless-stopped
+
+  # Streamlit SaaS Premium Bento UI Frontend Dashboard Component
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: factforge_frontend
+    command: streamlit run app/streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      - STREAMLIT_SERVER_PORT=8501
+    networks:
+      - factforge_network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+networks:
+  factforge_network:
+    driver: bridge
