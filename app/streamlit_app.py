@@ -288,27 +288,38 @@ with col_right:
 # 5. Core Operational Form Actions Logic Route
 if analyze_url_btn and url_input.strip():
     source_descriptor = url_input.replace("https://", "").replace("www.", "")[:22] + "..."
-    with st.spinner("Executing non-blocking asynchronous data extraction..."):
-        # Utilizing our cached network function wrapper
+    with st.spinner("Executing non-blocking data extraction..."):
+        # Attempt to reach local backend container if available
         data = fetch_api_prediction("http://127.0.0.1:8000/predict-url", {"url": url_input})
         
-        if data is None and get_prediction:
-            try:
-                # In-process direct backup if server port isn't bound locally
-                import asyncio
-                scraped = asyncio.run(extract_text_from_url_async(url_input))
-                data = get_prediction(scraped)
-            except Exception as e:
-                st.error(f"In-Process Ingestion Module Failure: {e}")
+        # Streamlit Cloud Fallback Engine
+        if data is None:
+            if get_prediction is not None and extract_text_from_url_async is not None:
+                try:
+                    import asyncio
+                    # Run the asynchronous scraping engine directly inside the app process
+                    scraped = asyncio.run(extract_text_from_url_async(url_input))
+                    data = get_prediction(scraped)
+                except Exception as fallback_err:
+                    st.error(f"Cloud Ingestion Engine Error: {str(fallback_err)}")
+            else:
+                st.error("System Connection Error: Core machine learning service endpoints are unreachable.")
 
 elif analyze_text_btn and text_input.strip():
     source_descriptor = text_input[:18] + "..."
     with st.spinner("Running predictive feature assessments..."):
-        # Utilizing our cached network function wrapper
+        # Attempt to reach local backend container if available
         data = fetch_api_prediction("http://127.0.0.1:8000/predict", {"text": text_input})
             
-        if data is None and get_prediction:
-            data = get_prediction(text_input)
+        # Streamlit Cloud Fallback Engine
+        if data is None:
+            if get_prediction is not None:
+                try:
+                    data = get_prediction(text_input)
+                except Exception as fallback_err:
+                    st.error(f"Cloud Classifier Error: {str(fallback_err)}")
+            else:
+                st.error("System Connection Error: Machine learning inference engine could not be initialized.")
 
 # Row B: The Performance Analytics Dashboard Bento Card Layer
 if data is not None:
