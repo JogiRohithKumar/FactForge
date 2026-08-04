@@ -1,0 +1,16 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+sqlalchemy==2.0.35
+joblib==1.5.3
+scikit-learn==1.8.0
+pandas==3.0.2
+numpy==2.4.4
+nltk==3.9.1
+requests==2.32.3
+beautifulsoup4==4.12.3
+lxml==5.3.0
+lxml_html_clean==0.2.2
+newspaper3k==0.2.8
+python-dotenv==1.0.1
