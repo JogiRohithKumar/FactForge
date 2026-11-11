@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from urllib.parse import urlsplit
 from app.api.routes import analysis, auth, history, predict
 from app.core.config import get_settings
 from app.core.logging_config import configure_logging
@@ -25,6 +27,23 @@ app.add_middleware(
     allow_credentials=True, allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "Authorization", "X-CSRF-Token"],
 )
+
+_ALLOWED_ORIGINS = {origin.rstrip("/") for origin in settings.cors_origins}
+
+@app.middleware("http")
+async def enforce_request_origin(request, call_next):
+    # Browser state-changing requests carry Origin. Validate it independently
+    # of CORS so simple form submissions cannot bypass the browser policy.
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        origin = request.headers.get("origin")
+        if not origin:
+            referer = request.headers.get("referer")
+            if referer:
+                parsed = urlsplit(referer)
+                origin = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else None
+        if origin and origin.rstrip("/") not in _ALLOWED_ORIGINS:
+            return JSONResponse(status_code=403, content={"detail": "Request origin is not allowed"})
+    return await call_next(request)
 
 @app.get("/", tags=["meta"])
 def root():
