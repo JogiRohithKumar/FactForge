@@ -3,7 +3,7 @@
 ## Supported security controls
 - Passwords are stored using Argon2 hashes through pwdlib; plaintext passwords are never persisted.
 - Session JWTs are short-lived and held in HttpOnly cookies. The frontend does not read or store the token in localStorage/sessionStorage.
-- Cookies use SameSite=Strict. Production must serve over HTTPS and set COOKIE_SECURE=true.
+- Cookies use SameSite=Strict. Production must serve over HTTPS and set COOKIE_SECURE=true. State-changing browser requests with an Origin or Referer header are checked against configured CORS origins.
 - Protected analysis and history routes require a valid active account.
 - History queries are filtered by the authenticated user ID. Unowned legacy rows are not returned to any user.
 - Redis rate limits apply to registration, login and analysis endpoints; a Redis failure causes a fail-closed 503.
@@ -27,7 +27,7 @@ When configured, candidate claim text and retrieved page excerpts are sent to Go
 
 ## Residual risks
 - Email verification, password reset, account deletion, session revocation, account-based quotas and audit events are not implemented.
-- SameSite cookies reduce cross-site request exposure but are not a replacement for deployment-level Origin/CSRF enforcement in every topology.
+- SameSite cookies and the application Origin check reduce cross-site request exposure; deployments should still enforce trusted-origin/CSRF policy at the edge, especially when frontend and API are on different sites. Requests without Origin/Referer are allowed for non-browser API clients.
 - IP-based limits can penalize users behind shared NAT and can be evaded by distributed clients.
 - A URL can be safe at fetch time but contain untrusted or malicious page content. Treat all extracted text and third-party review metadata as untrusted data.
 - Search snippets and publisher ratings are research material, not proof. No independent semantic evidence adjudicator or editorial review queue exists yet.
