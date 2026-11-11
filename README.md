@@ -147,7 +147,7 @@ GitHub Actions runs backend tests and frontend typecheck/build on pushes and pul
 1. **Independent evidence assessment:** add primary-source retrieval (not just general web search), source authenticity checks, evidence passage extraction, temporal/context alignment and a validated NLI/LLM entailment/contradiction model with calibrated abstention.
 2. **Human review:** queue uncertain, high-impact and conflicting cases for editorial adjudication and audit trails.
 3. **Account lifecycle:** email verification, password reset, session revocation/rotation, account deletion and privacy retention controls.
-4. **CSRF and deployment controls:** enforce trusted-origin checks at the edge, deploy frontend/API on the same site, use HTTPS, configure secure cookies and verify reverse-proxy trust boundaries.
+4. **CSRF and deployment controls:** the API validates browser Origin/Referer headers against configured origins; also enforce trusted-origin/CSRF policy at the edge, deploy frontend/API on the same site, use HTTPS, configure secure cookies and verify reverse-proxy trust boundaries.
 5. **Abuse and resilience:** account-based quotas, request body limits at the reverse proxy, provider budgets, circuit breakers and retry/backoff policies.
 6. **Operations:** structured metrics/tracing, error reporting, backups/restore drills, dependency scanning, SBOM, secret rotation and load/security testing.
 7. **ML evaluation:** replace synthetic demo model claims with audited real datasets, source/time-separated evaluation, calibration, drift monitoring and model registry.
