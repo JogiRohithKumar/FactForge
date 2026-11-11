@@ -1,34 +1,26 @@
 from datetime import datetime
-
 from pydantic import BaseModel, Field, field_validator
-
 from app.core.config import get_settings
-
 settings = get_settings()
-
 
 class TextRequest(BaseModel):
     text: str = Field(..., min_length=20, max_length=settings.max_text_length)
-
     @field_validator("text")
     @classmethod
-    def not_just_whitespace(cls, v: str) -> str:
-        if not v.strip():
+    def not_just_whitespace(cls, value: str) -> str:
+        if not value.strip():
             raise ValueError("text must not be empty or whitespace-only")
-        return v
-
+        return value
 
 class UrlRequest(BaseModel):
     url: str = Field(..., min_length=8, max_length=2048)
-
     @field_validator("url")
     @classmethod
-    def must_look_like_url(cls, v: str) -> str:
-        v = v.strip()
-        if not (v.startswith("http://") or v.startswith("https://")):
+    def must_look_like_url(cls, value: str) -> str:
+        value = value.strip()
+        if not value.startswith(("http://", "https://")):
             raise ValueError("url must start with http:// or https://")
-        return v
-
+        return value
 
 class PredictionResponse(BaseModel):
     id: str
@@ -38,10 +30,8 @@ class PredictionResponse(BaseModel):
     source_preview: str
     created_at: datetime
 
-
 class HistoryResponse(BaseModel):
     items: list[PredictionResponse]
-
 
 class HealthResponse(BaseModel):
     status: str

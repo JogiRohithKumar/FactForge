@@ -1,133 +1,154 @@
-"""
-Fetches and extracts article text from a user-supplied URL.
+"""HTML extraction with DNS validation and socket-level destination pinning.
 
-SECURITY: the original implementation passed the raw user URL straight to
-`requests.get()` / Newspaper3k with no validation, which is a textbook
-SSRF vector — a user could point it at cloud metadata endpoints
-(169.254.169.254), internal services, or loopback addresses and have the
-*server* fetch it on their behalf. This version:
-  1. only allows http/https,
-  2. resolves the hostname and rejects private/loopback/link-local/
-     reserved/multicast IP ranges before connecting,
-  3. disables automatic redirect-following and fails closed on any
-     redirect rather than silently trusting a hop we haven't validated.
-
-Caveat documented rather than hidden: a DNS-rebinding attack (where the
-name resolves to a safe IP at validation time and a private IP at
-connect time) is not fully closed by this alone. Fully closing that
-requires pinning the resolved IP into the actual socket connection
-(e.g. a custom requests Transport/HTTPAdapter). That's a reasonable
-next hardening step — flagged in README follow-ups rather than silently
-left out.
+The adapter connects to the exact public IP resolved during validation while
+preserving the original hostname for HTTP Host and TLS SNI verification.
+Redirects are followed manually and revalidated one hop at a time.
 """
 import ipaddress
-import logging
 import socket
-from urllib.parse import urlparse
-
+from urllib.parse import urljoin, urlparse
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3 import PoolManager
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
+from urllib3.util import connection as urllib3_connection
 from bs4 import BeautifulSoup
-
 from app.core.config import get_settings
 
-logger = logging.getLogger(__name__)
-
-_ALLOWED_SCHEMES = {"http", "https"}
-_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
-
-
+_UA = "FactForgeResearchBot/1.0 (+article analysis)"
 class UnsafeUrlError(ValueError):
-    """Raised when a URL fails SSRF safety checks."""
-
-
+    pass
 class ExtractionError(ValueError):
-    """Raised when the URL is safe but its content can't be extracted."""
+    pass
 
-
-def _assert_public_host(hostname: str) -> None:
+def _resolve_public(hostname: str, port: int) -> set[str]:
     try:
-        addrinfos = socket.getaddrinfo(hostname, None)
-    except socket.gaierror as e:
-        raise UnsafeUrlError(f"Could not resolve host: {hostname}") from e
+        infos = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise UnsafeUrlError("Hostname could not be resolved") from exc
+    addresses = set()
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if not ip.is_global:
+            raise UnsafeUrlError("Target resolves to a non-public IP address")
+        addresses.add(str(ip))
+    if not addresses:
+        raise UnsafeUrlError("No usable address found")
+    return addresses
 
-    for family, _, _, _, sockaddr in addrinfos:
-        ip = ipaddress.ip_address(sockaddr[0])
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_multicast
-            or ip.is_reserved
-            or ip.is_unspecified
-        ):
-            raise UnsafeUrlError(
-                f"Refusing to fetch a URL that resolves to a non-public address ({ip})"
-            )
-
-
-def _validate_url(url: str) -> str:
+def _validate_url(url: str):
     parsed = urlparse(url)
-    if parsed.scheme not in _ALLOWED_SCHEMES:
-        raise UnsafeUrlError("Only http:// and https:// URLs are allowed")
-    if not parsed.hostname:
-        raise UnsafeUrlError("URL has no hostname")
-    _assert_public_host(parsed.hostname)
-    return url
-
-
-def extract_text_from_url(url: str) -> str:
-    """Extracts clean article text from a news URL. Raises UnsafeUrlError or ExtractionError."""
-    settings = get_settings()
-    validated_url = _validate_url(url)
-
-    # Engine A: Newspaper3k (best quality when it works)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise UnsafeUrlError("Only absolute HTTP(S) URLs are accepted")
+    if parsed.username or parsed.password:
+        raise UnsafeUrlError("Credentials in URLs are not accepted")
     try:
-        from newspaper import Article
+        default_port = 443 if parsed.scheme == "https" else 80
+        port = parsed.port or default_port
+    except ValueError as exc:
+        raise UnsafeUrlError("URL contains an invalid port") from exc
+    if port != default_port:
+        raise UnsafeUrlError("Only standard HTTP and HTTPS ports are accepted")
+    return parsed, sorted(_resolve_public(parsed.hostname, port))[0]
 
-        article = Article(validated_url)
-        article.download()
-        article.parse()
-        if article.text.strip():
-            return article.text
+class _PinnedHTTPConnection(HTTPConnection):
+    def __init__(self, *args, pinned_ip=None, **kwargs):
+        self.pinned_ip = pinned_ip
+        super().__init__(*args, **kwargs)
+    def _new_conn(self):
+        if not self.pinned_ip:
+            raise UnsafeUrlError("Outbound connection has no validated destination")
+        return urllib3_connection.create_connection(
+            (self.pinned_ip, self.port), self.timeout,
+            source_address=self.source_address, socket_options=self.socket_options,
+        )
+
+class _PinnedHTTPSConnection(HTTPSConnection):
+    def __init__(self, *args, pinned_ip=None, **kwargs):
+        self.pinned_ip = pinned_ip
+        super().__init__(*args, **kwargs)
+    def _new_conn(self):
+        if not self.pinned_ip:
+            raise UnsafeUrlError("Outbound connection has no validated destination")
+        return urllib3_connection.create_connection(
+            (self.pinned_ip, self.port), self.timeout,
+            source_address=self.source_address, socket_options=self.socket_options,
+        )
+
+class _PinnedHTTPPool(HTTPConnectionPool):
+    ConnectionCls = _PinnedHTTPConnection
+class _PinnedHTTPSPool(HTTPSConnectionPool):
+    ConnectionCls = _PinnedHTTPSConnection
+
+class _PinnedPoolManager(PoolManager):
+    pool_classes_by_scheme = {"http": _PinnedHTTPPool, "https": _PinnedHTTPSPool}
+
+class _PinnedHTTPAdapter(HTTPAdapter):
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        self.poolmanager = _PinnedPoolManager(num_pools=connections, maxsize=maxsize, block=block, **pool_kwargs)
+    def get_connection_with_tls_context(self, request, verify, proxies=None, cert=None):
+        _, pinned_ip = _validate_url(request.url)
+        pool = super().get_connection_with_tls_context(request, verify, proxies, cert)
+        pool.conn_kw["pinned_ip"] = pinned_ip
+        return pool
+    def get_connection(self, url, proxies=None):
+        # Compatibility path for Requests versions that still call this method.
+        _, pinned_ip = _validate_url(url)
+        pool = super().get_connection(url, proxies)
+        pool.conn_kw["pinned_ip"] = pinned_ip
+        return pool
+
+def _fetch_with_redirects(url: str, timeout: float, max_redirects: int = 3) -> str:
+    session = requests.Session()
+    session.trust_env = False
+    session.mount("http://", _PinnedHTTPAdapter())
+    session.mount("https://", _PinnedHTTPAdapter())
+    current = url
+    try:
+        for _ in range(max_redirects + 1):
+            response = session.get(
+                current, headers={"User-Agent": _UA, "Accept": "text/html"},
+                timeout=(2.0, timeout), allow_redirects=False, stream=True,
+            )
+            if response.is_redirect:
+                location = response.headers.get("Location")
+                response.close()
+                if not location:
+                    raise ExtractionError("Redirect response did not include a destination")
+                current = urljoin(current, location)
+                continue
+            response.raise_for_status()
+            content_type = response.headers.get("Content-Type", "").lower()
+            if "text/html" not in content_type and "application/xhtml+xml" not in content_type:
+                response.close()
+                raise ExtractionError("URL did not return an HTML document")
+            chunks, total, max_bytes = [], 0, 3_000_000
+            for chunk in response.iter_content(65536):
+                total += len(chunk)
+                if total > max_bytes:
+                    response.close()
+                    raise ExtractionError("Article page exceeds the 3 MB extraction limit")
+                chunks.append(chunk)
+            encoding = response.encoding or "utf-8"
+            response.close()
+            return b"".join(chunks).decode(encoding, errors="replace")
+        raise ExtractionError("Too many redirects")
     except UnsafeUrlError:
         raise
-    except Exception as e:  # noqa: BLE001 - deliberately broad: any parser failure should fall through
-        logger.info("Newspaper3k extraction failed, falling back to raw HTML parse: %s", e)
+    except requests.RequestException as exc:
+        raise ExtractionError("Unable to retrieve the article page") from exc
+    finally:
+        session.close()
 
-    # Engine B: raw HTML parse fallback
-    headers = {
-        "User-Agent": _UA,
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-    }
-    try:
-        response = requests.get(
-            validated_url,
-            headers=headers,
-            timeout=settings.scrape_timeout_seconds,
-            allow_redirects=False,  # fail closed rather than trust an unvalidated redirect target
-        )
-    except requests.exceptions.RequestException as e:
-        raise ExtractionError(f"Request to target URL failed: {e}") from e
-
-    if response.is_redirect:
-        raise ExtractionError(
-            "Target URL returned a redirect; re-submit the final destination URL directly."
-        )
-    if response.status_code != 200:
-        raise ExtractionError(f"Target URL returned status code {response.status_code}")
-
-    soup = BeautifulSoup(response.text, "html.parser")
-    for element in soup(["script", "style", "nav", "footer", "header", "aside"]):
-        element.decompose()
-
-    paragraphs = [p.get_text().strip() for p in soup.find_all("p") if len(p.get_text().strip()) > 20]
-    text_content = " ".join(paragraphs)
-
-    if not text_content.strip():
-        raise ExtractionError("No extractable article text found on the page")
-
-    return text_content
+def extract_text_from_url(url: str) -> str:
+    settings = get_settings()
+    html = _fetch_with_redirects(url, settings.scrape_timeout_seconds)
+    soup = BeautifulSoup(html, "html.parser")
+    for node in soup(["script", "style", "nav", "footer", "header", "aside", "form"]):
+        node.decompose()
+    paragraphs = [p.get_text(" ", strip=True) for p in soup.find_all("p")]
+    text = " ".join(p for p in paragraphs if len(p) > 30)
+    if len(text) < 100:
+        raise ExtractionError("The page did not contain enough extractable article text")
+    return text[:settings.max_scraped_text_length]
